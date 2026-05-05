@@ -86,10 +86,6 @@ export default function LoginPage() {
             {loading ? "Вход..." : "Войти"}
           </button>
         </form>
-
-        <p style={{ textAlign: "center", fontSize: "0.8rem", color: "#94a3b8", marginTop: 20 }}>
-          JWT сохраняется в localStorage и используется в `Authorization: Bearer ...`
-        </p>
       </div>
     </div>
   );

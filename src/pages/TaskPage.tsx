@@ -49,14 +49,21 @@ export default function TaskPage() {
         api.materialsByTask(id),
         api.users()
       ]);
+
       setTask(t);
-      setVersions(vs);
-      setStatuses(st);
-      setMaterials(mats);
-      setUsers(us);
-      const map = new Map(st.map((s) => [s.id, s.title]));
-      setStatus(map.get(t.id_status) ?? "");
+      setVersions(vs || []); // Защита от null с бэкенда
+      setStatuses(st || []);
+      setMaterials(mats || []);
+      setUsers(us || []);
+
+      // Безопасный поиск статуса
+      if (t && st) {
+        const currentStatus = st.find(s => s.id === t.id_status);
+        setStatus(currentStatus ? currentStatus.title : "");
+      }
+      
     } catch (err) {
+      console.error("Ошибка загрузки данных:", err);
       setError(err);
     } finally {
       setLoading(false);

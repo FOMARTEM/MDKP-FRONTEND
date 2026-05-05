@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import FullscreenLoader from "../components/FullscreenLoader";
 import InlineError from "../components/InlineError";
-import { api, type Log } from "../lib/api";
+import { api, type Log, type User } from "../lib/api";
 import { formatDate } from "../lib/date";
 import { isEmail, isISODate } from "../lib/validation";
 
 export default function ActivityLogPage() {
+  // Инициализируем пустым массивом для безопасности
   const [logs, setLogs] = useState<Log[]>([]);
+  const [usersMap, setUsersMap] = useState<Map<number, string>>(new Map());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<unknown>(null);
 
@@ -39,14 +41,31 @@ export default function ActivityLogPage() {
         if (!isISODate(endDate)) throw new Error("end_date должен быть YYYY-MM-DD");
         q.end_date = endDate;
       }
-      const data = await api.activityLogs({
-        ...q,
-        limit: limit.trim() ? Number(limit) : undefined,
-        offset: offset.trim() ? Number(offset) : undefined
+
+      const [logsData, usersData] = await Promise.all([
+        api.activityLogs({
+          ...q,
+          limit: limit.trim() ? Number(limit) : undefined,
+          offset: offset.trim() ? Number(offset) : undefined
+        }),
+        api.users()
+      ]);
+
+      // ЗАЩИТА: Если бэкенд вернул null вместо массива, используем []
+      const safeLogs = logsData || [];
+      const safeUsers = usersData || [];
+
+      const uMap = new Map<number, string>();
+      safeUsers.forEach((u: User) => {
+        if (u && u.id) uMap.set(u.id, u.email);
       });
-      setLogs(data);
+
+      setUsersMap(uMap);
+      setLogs(safeLogs);
     } catch (err) {
+      console.error("Ошибка при загрузке логов:", err);
       setError(err);
+      setLogs([]); // Очищаем список при ошибке, чтобы старые данные не смущали
     } finally {
       setLoading(false);
     }
@@ -102,26 +121,37 @@ export default function ActivityLogPage() {
 
       <div className="card">
         <h3>События</h3>
-        <table>
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Время</th>
-              <th>User ID</th>
-              <th>Действие</th>
-            </tr>
-          </thead>
-          <tbody>
-            {logs.map((l) => (
-              <tr key={l.id}>
-                <td>{l.id}</td>
-                <td>{formatDate(l.date_created)}</td>
-                <td>{l.user_id}</td>
-                <td>{l.action}</td>
+        {/* ЗАЩИТА: Проверяем наличие логов перед отрисовкой таблицы */}
+        {!logs || logs.length === 0 ? (
+          <div className="muted" style={{ padding: "20px", textAlign: "center" }}>
+            Действий по данному пользователю не найдено
+          </div>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Время</th>
+                <th>Пользователь (Email)</th>
+                <th>Действие</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {logs.map((l) => (
+                <tr key={l.id}>
+                  <td>{l.id}</td>
+                  <td>{formatDate(l.date_created)}</td>
+                  <td>
+                    <span style={{ fontWeight: "bold", color: "var(--primary)" }}>
+                      {usersMap.get(l.user_id) || `ID: ${l.user_id}`}
+                    </span>
+                  </td>
+                  <td>{l.action}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </>
   );

@@ -185,12 +185,6 @@ export default function TaskCreatePage() {
           </div>
         </div>
       </div>
-
-      <div className="card">
-        <div className="muted">
-          Роли и списки пользователей берутся из `/roles` и `/finduser`. Если ролей нет — проверь заполнение таблицы `Position`.
-        </div>
-      </div>
     </>
   );
 }

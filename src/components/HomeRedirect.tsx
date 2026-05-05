@@ -4,7 +4,12 @@ import { isAdmin } from "../lib/roles";
 
 export default function HomeRedirect() {
   const { user } = useAuth();
-  if (isAdmin(user?.role)) return <Navigate to="/users" replace />;
+
+  // Если админ — отправляем на страницу активности (логи)
+  if (isAdmin(user?.role)) {
+    return <Navigate to="/activity" replace />;
+  }
+
+  // Всех остальных отправляем на задачи
   return <Navigate to="/tasks" replace />;
 }
-

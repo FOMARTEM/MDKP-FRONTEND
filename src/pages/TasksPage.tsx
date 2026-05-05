@@ -19,7 +19,11 @@ export default function TasksPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<unknown>(null);
 
-  const statusById = useMemo(() => new Map(statuses.map((s) => [s.id, s.title])), [statuses]);
+  // Защита: если statuses придет как null, map не упадет
+  const statusById = useMemo(() => {
+    const safeStatuses = statuses || [];
+    return new Map(safeStatuses.map((s) => [s.id, s.title]));
+  }, [statuses]);
 
   const [sort, setSort] = useState<{ key: "status" | "deadline" | "priority"; dir: "asc" | "desc" }>({
     key: "deadline",
@@ -27,7 +31,10 @@ export default function TasksPage() {
   });
 
   const sortedTasks = useMemo(() => {
-    const copy = [...tasks];
+    // Защита: если tasks придет как null, создаем пустой массив
+    const copy = [...(tasks || [])];
+    if (copy.length === 0) return [];
+
     const dir = sort.dir === "asc" ? 1 : -1;
     copy.sort((a, b) => {
       if (sort.key === "priority") return (a.priority - b.priority) * dir;
@@ -44,10 +51,13 @@ export default function TasksPage() {
     setError(null);
     try {
       const [t, s] = await Promise.all([api.taskList(), api.statuses()]);
-      setTasks(t);
-      setStatuses(s);
+      // Защита: принудительно устанавливаем пустые массивы, если бэкенд вернул null
+      setTasks(t || []);
+      setStatuses(s || []);
     } catch (err) {
+      console.error("Ошибка загрузки задач:", err);
       setError(err);
+      setTasks([]); 
     } finally {
       setLoading(false);
     }
@@ -102,9 +112,10 @@ export default function TasksPage() {
           </div>
         </div>
 
-        {sortedTasks.length === 0 ? (
-          <div className="muted" style={{ marginTop: 10 }}>
-            Нет актуальных задач
+        {/* Проверка на пустой список задач */}
+        {!sortedTasks || sortedTasks.length === 0 ? (
+          <div className="muted" style={{ marginTop: 20, textAlign: "center", padding: "20px" }}>
+            Задач пока нет
           </div>
         ) : (
           <table>
@@ -146,4 +157,3 @@ export default function TasksPage() {
     </>
   );
 }
-
