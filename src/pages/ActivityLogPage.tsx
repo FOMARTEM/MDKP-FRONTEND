@@ -6,7 +6,6 @@ import { formatDate } from "../lib/date";
 import { isEmail, isISODate } from "../lib/validation";
 
 export default function ActivityLogPage() {
-  // Инициализируем пустым массивом для безопасности
   const [logs, setLogs] = useState<Log[]>([]);
   const [usersMap, setUsersMap] = useState<Map<number, string>>(new Map());
   const [loading, setLoading] = useState(false);
@@ -51,7 +50,6 @@ export default function ActivityLogPage() {
         api.users()
       ]);
 
-      // ЗАЩИТА: Если бэкенд вернул null вместо массива, используем []
       const safeLogs = logsData || [];
       const safeUsers = usersData || [];
 
@@ -65,15 +63,39 @@ export default function ActivityLogPage() {
     } catch (err) {
       console.error("Ошибка при загрузке логов:", err);
       setError(err);
-      setLogs([]); // Очищаем список при ошибке, чтобы старые данные не смущали
+      setLogs([]);
     } finally {
       setLoading(false);
     }
   };
 
+  // ФУНКЦИЯ СКАЧИВАНИЯ JSON
+  const downloadJSON = () => {
+    try {
+      // Подготавливаем данные: заменяем user_id на email для удобства чтения
+      const dataToDownload = logs.map(l => ({
+        id: l.id,
+        date: l.date_created,
+        user_email: usersMap.get(l.user_id) || `ID: ${l.user_id}`,
+        action: l.action
+      }));
+
+      const blob = new Blob([JSON.stringify(dataToDownload, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `activity_logs_${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert("Не удалось создать файл для скачивания");
+    }
+  };
+
   useEffect(() => {
     void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -112,19 +134,26 @@ export default function ActivityLogPage() {
             <input value={offset} onChange={(e) => setOffset(e.target.value)} />
           </div>
         </div>
-        <div style={{ marginTop: 12 }}>
+        <div style={{ marginTop: 12, display: "flex", gap: "10px" }}>
           <button className="btn btn-primary" onClick={load} disabled={loading}>
             Применить
+          </button>
+          {/* КНОПКА СКАЧИВАНИЯ */}
+          <button 
+            className="btn btn-outline" 
+            onClick={downloadJSON} 
+            disabled={loading || logs.length === 0}
+          >
+            Скачать JSON
           </button>
         </div>
       </div>
 
       <div className="card">
         <h3>События</h3>
-        {/* ЗАЩИТА: Проверяем наличие логов перед отрисовкой таблицы */}
         {!logs || logs.length === 0 ? (
           <div className="muted" style={{ padding: "20px", textAlign: "center" }}>
-            Действий по данному пользователю не найдено
+            Действий не найдено
           </div>
         ) : (
           <table>

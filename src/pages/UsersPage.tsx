@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import FullscreenLoader from "../components/FullscreenLoader";
 import InlineError from "../components/InlineError";
 import { api, type Role, type User } from "../lib/api";
@@ -20,7 +20,9 @@ export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Состояния для формы
   const [form, setForm] = useState({
     last_name: "",
     first_name: "",
@@ -33,7 +35,11 @@ export default function UsersPage() {
   });
   const [errors, setErrors] = useState<FieldErrors<Fields>>({});
   const [ok, setOk] = useState<string | null>(null);
+  
+  // Ошибки массового импорта
+  const [importErrors, setImportErrors] = useState<{ email: string; reason: string }[]>([]);
 
+  // Состояния поиска
   const [search, setSearch] = useState({ email: "", role: "", last_name: "", first_name: "" });
   const [found, setFound] = useState<User[]>([]);
 
@@ -45,9 +51,8 @@ export default function UsersPage() {
     try {
       const [r, u] = await Promise.all([api.roles(), api.users()]);
       setRoles(r);
-      setUsers(u);
+      setUsers(u || []);
       if (!form.role && r.length) setForm((f) => ({ ...f, role: r[0].title }));
-      if (!search.role && r.length) setSearch((s) => ({ ...s, role: "" }));
     } catch (err) {
       setError(err);
     } finally {
@@ -58,6 +63,65 @@ export default function UsersPage() {
   useEffect(() => {
     void reload();
   }, []);
+
+  // Экспорт в JSON
+  const downloadData = (data: any[], fileName: string) => {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${fileName}_${new Date().toISOString().split('T')[0]}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Массовый импорт с детализацией ошибок
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const json = JSON.parse(event.target?.result as string);
+        const usersToImport = Array.isArray(json) ? json : [json];
+        
+        setLoading(true);
+        setImportErrors([]);
+        setOk(null);
+        
+        let successCount = 0;
+        const failedUsers: { email: string; reason: string }[] = [];
+
+        for (const u of usersToImport) {
+          try {
+            if (!u.email) throw new Error("Поле email обязательно");
+            if (!u.password) throw new Error("Поле password обязательно");
+            
+            await api.createUser(u);
+            successCount++;
+          } catch (err: any) {
+            // Пытаемся достать описание ошибки из ответа сервера или объекта Error
+            const message = err?.response?.data?.error || err?.message || "Ошибка сервера";
+            failedUsers.push({
+              email: u.email || "Unknown Email",
+              reason: message
+            });
+          }
+        }
+        
+        if (successCount > 0) setOk(`Успешно создано пользователей: ${successCount}`);
+        setImportErrors(failedUsers);
+        await reload();
+      } catch (err) {
+        setError("Не удалось прочитать файл. Убедитесь, что это корректный JSON.");
+      } finally {
+        setLoading(false);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+      }
+    };
+    reader.readAsText(file);
+  };
 
   const validate = () => {
     const next: FieldErrors<Fields> = {};
@@ -74,7 +138,24 @@ export default function UsersPage() {
 
   return (
     <>
-      <h1>Управление сотрудниками</h1>
+      <div className="topbar">
+        <h1>Управление сотрудниками</h1>
+        <div style={{ display: "flex", gap: 10 }}>
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            style={{ display: "none" }} 
+            accept=".json" 
+            onChange={handleFileUpload} 
+          />
+          <button className="btn btn-outline" onClick={() => fileInputRef.current?.click()}>
+            Импорт JSON
+          </button>
+          <button className="btn btn-primary" onClick={reload} disabled={loading}>
+            Обновить
+          </button>
+        </div>
+      </div>
 
       <FullscreenLoader show={loading} />
       <InlineError error={error} />
@@ -109,6 +190,7 @@ export default function UsersPage() {
             onClick={async () => {
               setOk(null);
               setError(null);
+              setImportErrors([]);
               if (!validate()) return;
               setLoading(true);
               try {
@@ -161,12 +243,35 @@ export default function UsersPage() {
             {errors.password && <div className="error">{errors.password}</div>}
           </div>
         </div>
-        {ok && <div className="muted" style={{ marginTop: 10 }}>{ok}</div>}
+
+        {/* Успешное сообщение */}
+        {ok && <div className="muted" style={{ marginTop: 10, color: "green", fontWeight: "bold" }}>{ok}</div>}
+
+        {/* Список ошибок импорта */}
+        {importErrors.length > 0 && (
+          <div style={{ marginTop: 15, padding: "10px", border: "1px solid #ffcccb", borderRadius: "4px", backgroundColor: "#fff5f5" }}>
+            <h4 style={{ color: "#d32f2f", margin: "0 0 8px 0" }}>Ошибки при импорте ({importErrors.length}):</h4>
+            <ul style={{ margin: 0, fontSize: "0.9em", color: "#333" }}>
+              {importErrors.map((err, idx) => (
+                <li key={idx} style={{ marginBottom: "4px" }}>
+                  <span style={{ fontWeight: "bold" }}>{err.email}</span>: {err.reason}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
 
       <div className="card">
-        <h3>Изменение прав / поиск</h3>
-        <div className="row-4">
+        <div className="topbar">
+          <h3 style={{ margin: 0 }}>Изменение прав / поиск</h3>
+          {found.length > 0 && (
+            <button className="btn btn-outline" onClick={() => downloadData(found, "search_results")}>
+              Скачать результаты ({found.length})
+            </button>
+          )}
+        </div>
+        <div className="row-4" style={{ marginTop: 15 }}>
           <div>
             <label>Email</label>
             <input value={search.email} onChange={(e) => setSearch({ ...search, email: e.target.value })} />
@@ -174,7 +279,7 @@ export default function UsersPage() {
           <div>
             <label>Роль</label>
             <select value={search.role} onChange={(e) => setSearch({ ...search, role: e.target.value })}>
-              <option value="">—</option>
+              <option value="">Все роли</option>
               {roleOptions.map((r) => (
                 <option key={r} value={r}>
                   {r}
@@ -205,7 +310,7 @@ export default function UsersPage() {
                   last_name: search.last_name || undefined,
                   first_name: search.first_name || undefined
                 });
-                setFound(data);
+                setFound(data || []);
               } catch (err) {
                 setError(err);
               } finally {
@@ -227,9 +332,7 @@ export default function UsersPage() {
           </button>
         </div>
         {found.length === 0 ? (
-          <div className="muted" style={{ marginTop: 12 }}>
-            Ничего не найдено
-          </div>
+          <div className="muted" style={{ marginTop: 12 }}>Ничего не найдено</div>
         ) : (
           <table>
             <thead>
@@ -259,16 +362,10 @@ export default function UsersPage() {
                         const role = roles.find((r) => r.title === roleTitle);
                         if (!role) return;
                         setLoading(true);
-                        setError(null);
                         try {
                           await api.updateUserRole(u.email, role.id);
-                          const data = await api.findUsers({
-                            role: search.role || undefined,
-                            email: search.email || undefined,
-                            last_name: search.last_name || undefined,
-                            first_name: search.first_name || undefined
-                          });
-                          setFound(data);
+                          await reload();
+                          setFound(prev => prev.map(item => item.id === u.id ? {...item, role: roleTitle} : item));
                         } catch (err) {
                           setError(err);
                         } finally {
@@ -290,16 +387,10 @@ export default function UsersPage() {
                       disabled={loading}
                       onClick={async () => {
                         setLoading(true);
-                        setError(null);
                         try {
                           await api.toggleUserActive(u.email);
-                          const data = await api.findUsers({
-                            role: search.role || undefined,
-                            email: search.email || undefined,
-                            last_name: search.last_name || undefined,
-                            first_name: search.first_name || undefined
-                          });
-                          setFound(data);
+                          await reload();
+                          setFound(prev => prev.map(item => item.id === u.id ? {...item, is_active: !item.is_active} : item));
                         } catch (err) {
                           setError(err);
                         } finally {
@@ -318,7 +409,16 @@ export default function UsersPage() {
       </div>
 
       <div className="card">
-        <h3>Все пользователи</h3>
+        <div className="topbar">
+          <h3 style={{ margin: 0 }}>Все пользователи</h3>
+          <button 
+            className="btn btn-outline" 
+            onClick={() => downloadData(users, "all_users")}
+            disabled={users.length === 0}
+          >
+            Скачать всех ({users.length})
+          </button>
+        </div>
         <table>
           <thead>
             <tr>

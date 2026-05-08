@@ -113,7 +113,7 @@ export default function TaskCreatePage() {
           <div>
             <label>Автор</label>
             <select value={String(form.id_author)} onChange={(e) => setForm({ ...form, id_author: Number(e.target.value) })}>
-              <option value="0">—</option>
+              <option value="0">Выберите Автора из списка</option>
               {authors.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.last_name} {a.first_name} ({a.email})
@@ -124,7 +124,7 @@ export default function TaskCreatePage() {
           <div>
             <label>Редактор</label>
             <select value={String(form.id_redactor)} onChange={(e) => setForm({ ...form, id_redactor: Number(e.target.value) })}>
-              <option value="0">—</option>
+              <option value="0">Выберите Редактора из списка</option>
               {editors.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.last_name} {a.first_name} ({a.email})

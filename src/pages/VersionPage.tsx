@@ -197,7 +197,6 @@ export default function VersionPage() {
                         }
                       }}
                     >
-                      <option value="">—</option>
                       {statuses.map((s) => (
                         <option key={s.id} value={s.title}>
                           {s.title}

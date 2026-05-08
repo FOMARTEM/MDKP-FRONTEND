@@ -119,7 +119,6 @@ export default function TaskPage() {
             <div>
               <label>Статус</label>
               <select value={status} onChange={(e) => setStatus(e.target.value)}>
-                <option value="">—</option>
                 {statuses.map((s) => (
                   <option key={s.id} value={s.title}>
                     {s.title}
