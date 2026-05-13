@@ -28,13 +28,19 @@ export default function AboutPage() {
 
       <div className="card">
         <h3 style={{ marginTop: 0 }}>Ссылки</h3>
-        <div className="row-2">
+        <div className="row-3">
           <div>
-            <div className="label-like">GitHub</div>
-            <a className="link" href="https://github.com/FOMARTEM" target="_blank" rel="noreferrer">
-              github.com/FOMARTEM
+            <div className="label-like">BACKEND</div>
+            <a className="link" href="https://github.com/FOMARTEM/MDKP-BACKEND" target="_blank" rel="noreferrer">
+              Гитхаб бекенда
             </a>
           </div>
+        <div>
+            <div className="label-like">FRONTEND</div>
+            <a className="link" href="https://github.com/FOMARTEM/MDKP-FRONTEND" target="_blank" rel="noreferrer">
+              Гитхаб фронтенда
+            </a>
+        </div>
           <div>
             <div className="label-like">Telegram</div>
             <a className="link" href="https://t.me/FOMARTEM" target="_blank" rel="noreferrer">

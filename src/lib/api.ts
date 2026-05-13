@@ -10,7 +10,7 @@ export class ApiError extends Error {
   }
 }
 
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8080";
+const API_URL = import.meta.env.VITE_API_URL ?? "http://192.168.10.16:8080";
 
 function buildUrl(path: string, query?: Record<string, string | number | undefined>) {
   const url = new URL(path, API_URL);

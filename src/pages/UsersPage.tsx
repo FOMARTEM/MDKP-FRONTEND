@@ -15,6 +15,36 @@ type Fields =
   | "password"
   | "role";
 
+/**
+ * Вспомогательный компонент для предотвращения сдвигов интерфейса.
+ */
+function FormField({ label, error, children, required, style }: any) {
+  return (
+    <div style={{ position: "relative", paddingBottom: "20px", ...style }}>
+      <label style={{ display: "block", marginBottom: "4px" }}>
+        {label} {required && <span style={{ color: "red" }}>*</span>}
+      </label>
+      {children}
+      {error && (
+        <div 
+          className="error" 
+          style={{ 
+            position: "absolute", 
+            bottom: "2px", 
+            left: 0, 
+            fontSize: "11px", 
+            lineHeight: "1",
+            margin: 0,
+            whiteSpace: "nowrap"
+          }}
+        >
+          {error}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function UsersPage() {
   const [roles, setRoles] = useState<Role[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -64,7 +94,6 @@ export default function UsersPage() {
     void reload();
   }, []);
 
-  // Экспорт в JSON
   const downloadData = (data: any[], fileName: string) => {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -75,7 +104,6 @@ export default function UsersPage() {
     URL.revokeObjectURL(url);
   };
 
-  // Массовый импорт с детализацией ошибок
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -95,26 +123,36 @@ export default function UsersPage() {
 
         for (const u of usersToImport) {
           try {
-            if (!u.email) throw new Error("Поле email обязательно");
-            if (!u.password) throw new Error("Поле password обязательно");
-            
+            // 1. Проверка обязательных полей
+            if (!u.email || !u.password || !u.phone || !u.last_name || !u.first_name || !u.middle_name) {
+              throw new Error("Отсутствуют обязательные поля (ФИО, Email, Телефон, Пароль)");
+            }
+
+            // 2. Строгая проверка телефона (запрет +7, разрешено только 8XXXXXXXXXX)
+            if (!isPhone(u.phone)) {
+              throw new Error("Неверный формат телефона. Ожидается 11 цифр, начиная с 8");
+            }
+
+            // 3. Валидация Email
+            if (!isEmail(u.email)) {
+              throw new Error("Некорректный формат Email");
+            }
+
             await api.createUser(u);
             successCount++;
           } catch (err: any) {
-            // Пытаемся достать описание ошибки из ответа сервера или объекта Error
-            const message = err?.response?.data?.error || err?.message || "Ошибка сервера";
             failedUsers.push({
-              email: u.email || "Unknown Email",
-              reason: message
+              email: u.email || "Unknown",
+              reason: err?.response?.data?.error || err?.message || "Ошибка сервера"
             });
           }
         }
         
-        if (successCount > 0) setOk(`Успешно создано пользователей: ${successCount}`);
+        if (successCount > 0) setOk(`Успешно импортировано: ${successCount}`);
         setImportErrors(failedUsers);
         await reload();
       } catch (err) {
-        setError("Не удалось прочитать файл. Убедитесь, что это корректный JSON.");
+        setError("Не удалось обработать JSON файл.");
       } finally {
         setLoading(false);
         if (fileInputRef.current) fileInputRef.current.value = "";
@@ -127,11 +165,18 @@ export default function UsersPage() {
     const next: FieldErrors<Fields> = {};
     if (!required(form.last_name)) next.last_name = "Обязательное поле";
     if (!required(form.first_name)) next.first_name = "Обязательное поле";
-    if (!required(form.email) || !isEmail(form.email)) next.email = "Введите корректный email";
+    if (!required(form.middle_name)) next.middle_name = "Обязательное поле";
+    if (!required(form.email) || !isEmail(form.email)) next.email = "Некорректный email";
     if (!required(form.password) || !minMax(form.password, 8, 16)) next.password = "Пароль: 8–16 символов";
     if (!required(form.role)) next.role = "Выберите роль";
-    if (form.phone && !isPhone(form.phone)) next.phone = "Введите корректный телефон";
-    if (form.date_of_birth && !isISODate(form.date_of_birth)) next.date_of_birth = "Дата: YYYY-MM-DD";
+    
+    if (!required(form.phone)) {
+      next.phone = "Обязательное поле";
+    } else if (!isPhone(form.phone)) {
+      next.phone = "Формат: 8XXXXXXXXXX";
+    }
+
+    if (form.date_of_birth && !isISODate(form.date_of_birth)) next.date_of_birth = "Формат: YYYY-MM-DD";
     setErrors(next);
     return Object.keys(next).length === 0;
   };
@@ -162,95 +207,96 @@ export default function UsersPage() {
 
       <div className="card">
         <h3>Регистрация нового пользователя</h3>
-        <div className="row-4" style={{ gridTemplateColumns: "1fr 1fr 1fr auto" }}>
-          <div>
-            <label>Фамилия</label>
+        
+        <div className="row-4" style={{ gridTemplateColumns: "1fr 1fr 1fr auto", alignItems: "start" }}>
+          <FormField label="Фамилия" error={errors.last_name} required>
             <input value={form.last_name} onChange={(e) => setForm({ ...form, last_name: e.target.value })} />
-            {errors.last_name && <div className="error">{errors.last_name}</div>}
-          </div>
-          <div>
-            <label>Email</label>
+          </FormField>
+
+          <FormField label="Email" error={errors.email} required>
             <input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-            {errors.email && <div className="error">{errors.email}</div>}
-          </div>
-          <div>
-            <label>Роль</label>
+          </FormField>
+
+          <FormField label="Роль" error={errors.role} required>
             <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
               {roleOptions.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
+                <option key={r} value={r}>{r}</option>
               ))}
             </select>
-            {errors.role && <div className="error">{errors.role}</div>}
+          </FormField>
+
+          <div style={{ paddingTop: "26px" }}>
+            <button
+              className="btn btn-primary"
+              disabled={loading}
+              onClick={async () => {
+                setOk(null);
+                setError(null);
+                setImportErrors([]);
+                if (!validate()) return;
+                setLoading(true);
+                try {
+                  await api.createUser(form);
+                  setOk("Пользователь создан");
+                  setForm({
+                    last_name: "", first_name: "", middle_name: "",
+                    phone: "", date_of_birth: "", email: "",
+                    password: "", role: roleOptions[0] || ""
+                  });
+                  setErrors({});
+                  await reload();
+                } catch (err) {
+                  setError(err);
+                } finally {
+                  setLoading(false);
+                }
+              }}
+            >
+              Создать
+            </button>
           </div>
-          <button
-            className="btn btn-primary"
-            disabled={loading}
-            onClick={async () => {
-              setOk(null);
-              setError(null);
-              setImportErrors([]);
-              if (!validate()) return;
-              setLoading(true);
-              try {
-                await api.createUser(form);
-                setOk("Пользователь создан");
-                setForm((f) => ({ ...f, password: "" }));
-                await reload();
-              } catch (err) {
-                setError(err);
-              } finally {
-                setLoading(false);
-              }
-            }}
-          >
-            Создать
-          </button>
         </div>
-        <div className="row-4" style={{ marginTop: 12 }}>
-          <div>
-            <label>Имя</label>
+
+        <div className="row-4" style={{ marginTop: 4, alignItems: "start" }}>
+          <FormField label="Имя" error={errors.first_name} required>
             <input value={form.first_name} onChange={(e) => setForm({ ...form, first_name: e.target.value })} />
-            {errors.first_name && <div className="error">{errors.first_name}</div>}
-          </div>
-          <div>
-            <label>Отчество</label>
+          </FormField>
+
+          <FormField label="Отчество" error={errors.middle_name} required>
             <input value={form.middle_name} onChange={(e) => setForm({ ...form, middle_name: e.target.value })} />
-            {errors.middle_name && <div className="error">{errors.middle_name}</div>}
-          </div>
-          <div>
-            <label>Телефон</label>
-            <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-            {errors.phone && <div className="error">{errors.phone}</div>}
-          </div>
-          <div>
-            <label>Дата рождения</label>
+          </FormField>
+
+          <FormField label="Телефон" error={errors.phone} required>
+            <input 
+              value={form.phone} 
+              onChange={(e) => setForm({ ...form, phone: e.target.value })} 
+              placeholder="89001234567" 
+            />
+          </FormField>
+
+          <FormField label="Дата рождения" error={errors.date_of_birth}>
             <input
               type="date"
               value={form.date_of_birth}
               onChange={(e) => setForm({ ...form, date_of_birth: e.target.value })}
             />
-            {errors.date_of_birth && <div className="error">{errors.date_of_birth}</div>}
-          </div>
-          <div style={{ gridColumn: "1 / span 4" }}>
-            <label>Пароль (8–16 символов)</label>
-            <input
-              type="password"
+          </FormField>
+        </div>
+
+        <div style={{ marginTop: 4 }}>
+          <FormField label="Временный пароль (8–16 символов)" error={errors.password} required>
+            <input              
               value={form.password}
               onChange={(e) => setForm({ ...form, password: e.target.value })}
             />
-            {errors.password && <div className="error">{errors.password}</div>}
-          </div>
+          </FormField>
         </div>
 
-        {/* Успешное сообщение */}
         {ok && <div className="muted" style={{ marginTop: 10, color: "green", fontWeight: "bold" }}>{ok}</div>}
 
-        {/* Список ошибок импорта */}
         {importErrors.length > 0 && (
           <div style={{ marginTop: 15, padding: "10px", border: "1px solid #ffcccb", borderRadius: "4px", backgroundColor: "#fff5f5" }}>
-            <h4 style={{ color: "#d32f2f", margin: "0 0 8px 0" }}>Ошибки при импорте ({importErrors.length}):</h4>
+            <h4 style={{ color: "#d32f2f", margin: "0 0 8px 0" }}>Ошибки импорта ({importErrors.length}):</h4>
             <ul style={{ margin: 0, fontSize: "0.9em", color: "#333" }}>
               {importErrors.map((err, idx) => (
                 <li key={idx} style={{ marginBottom: "4px" }}>
@@ -281,9 +327,7 @@ export default function UsersPage() {
             <select value={search.role} onChange={(e) => setSearch({ ...search, role: e.target.value })}>
               <option value="">Все роли</option>
               {roleOptions.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
+                <option key={r} value={r}>{r}</option>
               ))}
             </select>
           </div>
@@ -331,9 +375,7 @@ export default function UsersPage() {
             Сброс
           </button>
         </div>
-        {found.length === 0 ? (
-          <div className="muted" style={{ marginTop: 12 }}>Ничего не найдено</div>
-        ) : (
+        {found.length > 0 && (
           <table>
             <thead>
               <tr>
@@ -374,9 +416,7 @@ export default function UsersPage() {
                       }}
                     >
                       {roleOptions.map((r) => (
-                        <option key={r} value={r}>
-                          {r}
-                        </option>
+                        <option key={r} value={r}>{r}</option>
                       ))}
                     </select>
                   </td>

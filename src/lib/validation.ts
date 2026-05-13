@@ -25,8 +25,21 @@ export function isIntInRange(value: number, min: number, max: number): boolean {
 
 export function isPhone(value: string): boolean {
   const raw = (value ?? "").trim();
+  
+  // 1. Проверка на пустоту
   if (!raw) return false;
+
+  // 2. Оставляем только цифры
   const digits = raw.replace(/[^\d]/g, "");
-  if (digits.length < 10 || digits.length > 15) return false;
-  return /^[+\d][\d\s().-]*$/.test(raw);
+
+  // 3. Проверка формата:
+  // - Должно быть ровно 11 цифр
+  // - Первая цифра должна быть именно "8"
+  if (digits.length !== 11 || digits[0] !== "8") {
+    return false;
+  }
+
+  // 4. Проверка на допустимые символы в исходной строке 
+  // (цифры, пробелы, скобки, дефисы)
+  return /^[\d\s().-]*$/.test(raw);
 }
